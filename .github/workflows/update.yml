@@ -1,0 +1,38 @@
+name: Daily Update TAIEX ETF Page
+
+on:
+  schedule:
+    # 每天台灣時間約 16:30 更新（UTC 08:30），週一到週五
+    - cron: '30 8 * * 1-5'
+  workflow_dispatch:          # 允許手動觸發
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install yfinance pandas
+
+      - name: Generate latest HTML
+        run: |
+          python generate.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --staged --quiet || git commit -m "chore: daily update $(date +'%Y-%m-%d %H:%M')"
+          git push
