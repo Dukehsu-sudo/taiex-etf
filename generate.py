@@ -4,8 +4,10 @@
 產生互動查詢頁 index.html
 
 預估價公式：
-  預估價 = 使用者輸入的大盤點數 × 近 240 個交易日平均比例
-  比例   = ETF 還原收盤價 / TAIEX
+  0050     = 大盤點數 × 近 240 個交易日平均比例
+  00631L   = 大盤點數 × 近   2 個交易日平均比例
+  00685L   = 大盤點數 × 近   2 個交易日平均比例
+  比例     = ETF 還原收盤價 / TAIEX
 """
 
 import json
@@ -26,8 +28,15 @@ TICKERS = {
     "00631L.TW": "00631L",
     "00685L.TW": "00685L",
 }
-RATIO_DAYS = 240          # 計算平均比例的交易日數
-CHART_YEARS = 12          # 歷史圖最多抓幾年
+
+# 各標的使用的平均比例天數
+RATIO_DAYS = {
+    "0050": 240,
+    "00631L": 2,
+    "00685L": 2,
+}
+
+CHART_YEARS = 12
 OUTPUT = Path("index.html")
 
 
@@ -49,20 +58,17 @@ def fetch_data():
 
 
 def calc_ratios(df: pd.DataFrame) -> dict:
-    """近 RATIO_DAYS 個交易日平均比例"""
-    n = min(RATIO_DAYS, len(df))
-    sub = df.tail(n)
+    """依各標的設定天數計算平均比例"""
     ratios = {}
-    for col in ["0050", "00631L", "00685L"]:
+    for col, days in RATIO_DAYS.items():
+        n = min(days, len(df))
+        sub = df.tail(n)
         ratios[col] = float((sub[col] / sub["TAIEX"]).mean())
-    print(f"使用近 {n} 日計算比例：")
-    for k, v in ratios.items():
-        print(f"  {k}: {v:.10f}")
+        print(f"  {col}: 近 {n} 日平均比例 = {ratios[col]:.10f}")
     return ratios
 
 
 def build_chart_data(df: pd.DataFrame) -> list:
-    """轉成前端可用的精簡陣列"""
     records = []
     for idx, row in df.iterrows():
         records.append({
@@ -89,6 +95,9 @@ def build_html(df: pd.DataFrame, ratios: dict, chart: list) -> str:
     ratios_json = json.dumps(ratios, ensure_ascii=False)
     prices_json = json.dumps(prices, ensure_ascii=False)
     chart_json = json.dumps(chart, ensure_ascii=False)
+
+    days_0050 = RATIO_DAYS["0050"]
+    days_l = RATIO_DAYS["00631L"]
 
     html = f'''<!DOCTYPE html>
 <html lang="zh-Hant">
@@ -248,7 +257,7 @@ def build_html(df: pd.DataFrame, ratios: dict, chart: list) -> str:
 </head>
 <body>
   <h1>台股 0050 / 正2 合理價估算</h1>
-  <p class="sub">預估價依近 {RATIO_DAYS} 交易日平均比例推算｜資料已還原分割</p>
+  <p class="sub">0050 用近 {days_0050} 日｜正2 用近 {days_l} 日平均比例｜資料已還原分割</p>
   <p class="update-info">最後更新：{last_update}（台灣時間）｜由 GitHub Actions 每日自動更新</p>
 
   <div class="card">
@@ -276,10 +285,10 @@ def build_html(df: pd.DataFrame, ratios: dict, chart: list) -> str:
       <tbody id="resultBody"></tbody>
     </table>
     <p class="note">
-      <b>預估價</b> = 你輸入的大盤點數 × 近 {RATIO_DAYS} 日平均比例<br>
+      <b>預估價</b>：0050 用近 {days_0050} 日平均比例；00631L / 00685L 用近 {days_l} 日平均比例<br>
       <b>合理價（理論）</b> = 最新收盤市價（實務上應參考投信公布的淨值 NAV）<br>
       折溢價 = 合理價（理論） − 預估價　｜　正數 = 市價相對預估偏高<br>
-      ※ 正2 因每日再平衡與波動耗損，急漲急跌後預估價與市價可能出現明顯偏離，此為結構特性。
+      ※ 正2 因每日再平衡與波動耗損，急漲急跌後預估價與市價仍可能出現偏離。
     </p>
   </div>
 
@@ -464,11 +473,12 @@ renderChart();
 
 def main():
     df = fetch_data()
+    print("計算比例：")
     ratios = calc_ratios(df)
     chart = build_chart_data(df)
     html = build_html(df, ratios, chart)
     OUTPUT.write_text(html, encoding="utf-8")
-    print(f"\\n已產生 {OUTPUT} （{len(html):,} bytes）")
+    print(f"\n已產生 {OUTPUT} （{len(html):,} bytes）")
     print(f"最後資料日期：{df.index[-1].date()}")
 
 
